@@ -1,5 +1,6 @@
-// src/pages/Login.tsx
-import { useState, type FormEvent } from "react";
+// src/pages/auth/Login.tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   signIn,
@@ -44,7 +45,7 @@ export default function Login() {
           password,
         });
       } catch (authErr: unknown) {
-        // If an existing session is blocking sign-in, clear it out and retry
+        // Clear conflicting session if already authenticated
         const message = authErr instanceof Error ? authErr.message : "";
         if (
           message.includes("signed in user") ||
@@ -61,14 +62,14 @@ export default function Login() {
       }
 
       if (signInResult.nextStep.signInStep === "DONE") {
-        // Refresh AuthContext with the newly authenticated user
+        // Refresh AuthContext with authenticated user
         const currentUser = await checkUser();
 
         // Redirect based on role
-        if (currentUser?.role === "admin") {
-          navigate("/admin/dashboard", { replace: true });
+        if (currentUser?.role?.toLowerCase() === "admin") {
+          navigate("/admin", { replace: true });
         } else {
-          navigate("/student/dashboard", { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       } else {
         setError(`Additional verification step required: ${signInResult.nextStep.signInStep}`);
@@ -152,20 +153,28 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#e5e5e5] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#e5e5e5] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         {/* Header Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#14213d] text-[#fca311] rounded-2xl shadow-lg border border-[#14213d]/20 mb-4">
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 bg-[#14213d] text-[#fca311] rounded-2xl shadow-lg border border-[#14213d]/20 mb-4 cursor-pointer"
+            onClick={() => navigate("/")}
+          >
             <FileText size={32} />
           </div>
-          <h1 className="text-3xl font-extrabold text-[#14213d] tracking-tight">DocVault</h1>
+          <h1
+            className="text-3xl font-extrabold text-[#14213d] tracking-tight cursor-pointer"
+            onClick={() => navigate("/")}
+          >
+            DocVault
+          </h1>
           <p className="text-[#14213d]/70 text-sm mt-1 font-medium">
             College Digital Document Vault
           </p>
         </div>
 
-        {/* Card */}
+        {/* Card Container */}
         <div className="bg-white rounded-2xl shadow-xl border border-[#14213d]/10 p-8">
           <h2 className="text-2xl font-extrabold text-[#14213d]">
             {forgotMode

@@ -1,6 +1,6 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext"; // Import AuthProvider
+import { AuthProvider } from "./context/AuthContext";
 import LandingPage from "./pages/LandingPage";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -11,26 +11,27 @@ import AdminRoute from "./components/AdminRoute";
 
 export default function App() {
   return (
-    // Wrap everything inside <AuthProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
           {/* Public Landing Page */}
           <Route path="/" element={<LandingPage />} />
 
-          {/* Auth Routes */}
+          {/* Auth Pages */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Protected Dashboard Routes */}
+          {/* Student Dashboard */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRole="student">
                 <StudentDashboard />
               </ProtectedRoute>
             }
           />
+
+          {/* Admin Dashboard */}
           <Route
             path="/admin"
             element={
@@ -40,7 +41,7 @@ export default function App() {
             }
           />
 
-          {/* Fallback */}
+          {/* Fallback route */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

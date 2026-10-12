@@ -22,10 +22,12 @@ export default function ProtectedRoute({ allowedRole, children }: ProtectedRoute
     );
   }
 
+  // 1. Not logged in -> Send strictly to /login (NOT '/')
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
+  // 2. Check role redirection
   const userRole = (user.role || "").toLowerCase();
 
   if (allowedRole && userRole !== allowedRole.toLowerCase()) {
