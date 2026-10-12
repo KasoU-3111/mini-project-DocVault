@@ -1,23 +1,19 @@
+// src/pages/Login.tsx
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   signIn,
-  getCurrentUser,
-  fetchAuthSession,
+  signOut,
   resetPassword,
   confirmResetPassword,
 } from "aws-amplify/auth";
-import {
-  FileText,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowLeft,
-} from "lucide-react";
+import { FileText, Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { parseAuthError } from "../utils/authUtils";
+import { useAuth } from "../context/AuthContext";
 
-function Login() {
+export default function Login() {
   const navigate = useNavigate();
+  const { checkUser } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,17 +28,6 @@ function Login() {
   const [newPassword, setNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  const redirectUser = async () => {
-    const session = await fetchAuthSession();
-    const groups = session.tokens?.idToken?.payload["cognito:groups"];
-
-    if (Array.isArray(groups) && groups.includes("Admins")) {
-      navigate("/admin/dashboard");
-    } else {
-      navigate("/student/dashboard");
-    }
-  };
-
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
@@ -50,44 +35,46 @@ function Login() {
     setLoading(true);
 
     try {
+      let signInResult;
+
       try {
-        await getCurrentUser();
-        await redirectUser();
-        return;
-      } catch {
-        // No active user session; continue with login.
+        // Attempt normal sign-in
+        signInResult = await signIn({
+          username: email.trim(),
+          password,
+        });
+      } catch (authErr: unknown) {
+        // If an existing session is blocking sign-in, clear it out and retry
+        const message = authErr instanceof Error ? authErr.message : "";
+        if (
+          message.includes("signed in user") ||
+          (authErr as { name?: string })?.name === "UserAlreadyAuthenticatedException"
+        ) {
+          await signOut({ global: true });
+          signInResult = await signIn({
+            username: email.trim(),
+            password,
+          });
+        } else {
+          throw authErr;
+        }
       }
 
-      const { nextStep } = await signIn({
-        username: email.trim(),
-        password,
-      });
+      if (signInResult.nextStep.signInStep === "DONE") {
+        // Refresh AuthContext with the newly authenticated user
+        const currentUser = await checkUser();
 
-      if (nextStep.signInStep === "DONE") {
-        await redirectUser();
+        // Redirect based on role
+        if (currentUser?.role === "admin") {
+          navigate("/admin/dashboard", { replace: true });
+        } else {
+          navigate("/student/dashboard", { replace: true });
+        }
       } else {
-        setError(
-          `Additional sign-in verification is required: ${nextStep.signInStep}`
-        );
+        setError(`Additional verification step required: ${signInResult.nextStep.signInStep}`);
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Login failed.";
-
-      const name =
-        err && typeof err === "object" && "name" in err
-          ? String(err.name)
-          : "";
-
-      if (name === "NotAuthorizedException") {
-        setError("Incorrect email or password.");
-      } else if (name === "UserNotFoundException") {
-        setError("No account found with this email.");
-      } else if (name === "UserNotConfirmedException") {
-        setError("Your email is not verified. Please verify your account first.");
-      } else {
-        setError(message);
-      }
+      setError(parseAuthError(err, "Login failed."));
     } finally {
       setLoading(false);
     }
@@ -100,30 +87,15 @@ function Login() {
     setLoading(true);
 
     try {
-      const result = await resetPassword({
-        username: email.trim(),
-      });
-
-      if (
-        result.nextStep.resetPasswordStep ===
-        "CONFIRM_RESET_PASSWORD_WITH_CODE"
-      ) {
+      const result = await resetPassword({ username: email.trim() });
+      if (result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE") {
         setCodeSent(true);
-        setSuccess(
-          "If the account is eligible, a password reset code has been sent to its registered contact method."
-        );
+        setSuccess("A verification code has been sent to your registered email.");
       } else {
-        setError(
-          "Cognito returned an unexpected password-reset step. Please try again."
-        );
+        setError("Unexpected reset step. Please try again.");
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Could not request a password reset.";
-
-      setError(message);
+      setError(parseAuthError(err, "Could not request password reset."));
     } finally {
       setLoading(false);
     }
@@ -155,28 +127,7 @@ function Login() {
       setPassword("");
       setSuccess("Password reset successfully. You can now log in.");
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Could not reset your password.";
-
-      const name =
-        err && typeof err === "object" && "name" in err
-          ? String(err.name)
-          : "";
-
-      if (
-        name === "CodeMismatchException" ||
-        name === "ExpiredCodeException"
-      ) {
-        setError("The code is invalid or expired. Request a new code and try again.");
-      } else if (name === "InvalidPasswordException") {
-        setError(
-          "The password does not meet your Cognito password policy. Choose a stronger password."
-        );
-      } else {
-        setError(message);
-      }
+      setError(parseAuthError(err, "Could not reset password."));
     } finally {
       setLoading(false);
     }
@@ -201,20 +152,22 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#e5e5e5] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
+        {/* Header Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg mb-4">
-            <FileText className="text-white" size={32} />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#14213d] text-[#fca311] rounded-2xl shadow-lg border border-[#14213d]/20 mb-4">
+            <FileText size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800">DocVault</h1>
-          <p className="text-slate-500 mt-2">
+          <h1 className="text-3xl font-extrabold text-[#14213d] tracking-tight">DocVault</h1>
+          <p className="text-[#14213d]/70 text-sm mt-1 font-medium">
             College Digital Document Vault
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-semibold text-slate-800">
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-[#14213d]/10 p-8">
+          <h2 className="text-2xl font-extrabold text-[#14213d]">
             {forgotMode
               ? codeSent
                 ? "Reset Your Password"
@@ -222,7 +175,7 @@ function Login() {
               : "Welcome Back"}
           </h2>
 
-          <p className="text-slate-500 mt-1 mb-6">
+          <p className="text-[#14213d]/60 text-sm mt-1 mb-6">
             {forgotMode
               ? codeSent
                 ? "Enter the verification code and choose a new password."
@@ -231,19 +184,13 @@ function Login() {
           </p>
 
           {error && (
-            <div
-              role="alert"
-              className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600"
-            >
+            <div role="alert" className="mb-5 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs font-semibold text-rose-700">
               {error}
             </div>
           )}
 
           {success && (
-            <div
-              role="status"
-              className="mb-5 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700"
-            >
+            <div role="status" className="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-xs font-semibold text-emerald-800">
               {success}
             </div>
           )}
@@ -252,14 +199,11 @@ function Login() {
             !codeSent ? (
               <form onSubmit={handleSendCode} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     Registered Email Address
                   </label>
                   <div className="relative">
-                    <Mail
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
+                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                     <input
                       type="email"
                       placeholder="Enter your registered email"
@@ -267,7 +211,7 @@ function Login() {
                       autoComplete="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-11 pr-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                     />
                   </div>
                 </div>
@@ -275,7 +219,7 @@ function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition"
+                  className="w-full bg-[#fca311] hover:bg-[#e08e03] disabled:opacity-50 text-[#14213d] font-bold py-3 rounded-xl transition shadow-md cursor-pointer"
                 >
                   {loading ? "Sending code..." : "Send Reset Code"}
                 </button>
@@ -283,7 +227,7 @@ function Login() {
                 <button
                   type="button"
                   onClick={backToLogin}
-                  className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-blue-600"
+                  className="w-full flex items-center justify-center gap-2 text-xs font-bold text-[#14213d]/70 hover:text-[#14213d] transition cursor-pointer"
                 >
                   <ArrowLeft size={16} /> Back to Login
                 </button>
@@ -291,7 +235,7 @@ function Login() {
             ) : (
               <form onSubmit={handleConfirmReset} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     Verification Code
                   </label>
                   <input
@@ -302,19 +246,16 @@ function Login() {
                     required
                     value={confirmationCode}
                     onChange={(e) => setConfirmationCode(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d] tracking-widest text-center"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     New Password
                   </label>
                   <div className="relative">
-                    <Lock
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
+                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                     <input
                       type={showNewPassword ? "text" : "password"}
                       autoComplete="new-password"
@@ -323,49 +264,31 @@ function Login() {
                       minLength={8}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full pl-11 pr-12 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-11 pr-12 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       aria-label={showNewPassword ? "Hide new password" : "Show new password"}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40 hover:text-[#14213d] cursor-pointer"
                     >
-                      {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Your password must also satisfy the rules configured in AWS Cognito.
-                  </p>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition"
+                  className="w-full bg-[#fca311] hover:bg-[#e08e03] disabled:opacity-50 text-[#14213d] font-bold py-3 rounded-xl transition shadow-md cursor-pointer"
                 >
                   {loading ? "Resetting password..." : "Reset Password"}
                 </button>
 
                 <button
                   type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setCodeSent(false);
-                    setConfirmationCode("");
-                    setNewPassword("");
-                    setError("");
-                    setSuccess("");
-                  }}
-                  className="w-full text-sm text-blue-600 hover:text-blue-700"
-                >
-                  Request another code
-                </button>
-
-                <button
-                  type="button"
                   onClick={backToLogin}
-                  className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-blue-600"
+                  className="w-full flex items-center justify-center gap-2 text-xs font-bold text-[#14213d]/70 hover:text-[#14213d] transition cursor-pointer"
                 >
                   <ArrowLeft size={16} /> Back to Login
                 </button>
@@ -374,14 +297,11 @@ function Login() {
           ) : (
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail
-                    size={20}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                  <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                   <input
                     type="email"
                     placeholder="Enter your email"
@@ -389,20 +309,17 @@ function Login() {
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full pl-11 pr-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock
-                    size={20}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                  <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
@@ -410,15 +327,15 @@ function Login() {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-11 pr-12 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full pl-11 pr-12 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40 hover:text-[#14213d] cursor-pointer"
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
@@ -426,7 +343,7 @@ function Login() {
               <div className="text-right">
                 <button
                   type="button"
-                  className="text-sm text-blue-600 hover:text-blue-700"
+                  className="text-xs font-bold text-[#14213d] hover:text-[#fca311] transition cursor-pointer"
                   onClick={openForgotPassword}
                 >
                   Forgot Password?
@@ -436,7 +353,7 @@ function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition"
+                className="w-full bg-[#14213d] hover:bg-[#0d1629] disabled:opacity-50 text-white font-bold py-3 rounded-xl transition shadow-md cursor-pointer"
               >
                 {loading ? "Logging in..." : "Login"}
               </button>
@@ -444,18 +361,15 @@ function Login() {
           )}
 
           {!forgotMode && (
-            <div className="text-center mt-6 text-sm text-slate-500">
+            <div className="text-center mt-6 text-xs text-[#14213d]/70">
               Don't have an account?{" "}
-              <Link
-                to="/register"
-                className="text-blue-600 font-semibold hover:text-blue-700"
-              >
+              <Link to="/register" className="text-[#14213d] font-bold hover:text-[#fca311] transition">
                 Create Account
               </Link>
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-400 mt-6">
+          <p className="text-center text-[11px] text-[#14213d]/40 mt-6">
             © 2026 DocVault. College Digital Document Management System.
           </p>
         </div>
@@ -463,5 +377,3 @@ function Login() {
     </div>
   );
 }
-
-export default Login;

@@ -1,13 +1,23 @@
+// src/components/ProtectedRoute.tsx
+import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-function ProtectedRoute() {
+export interface ProtectedRouteProps {
+  allowedRole?: "student" | "admin";
+  children?: ReactNode;
+}
+
+export default function ProtectedRoute({ allowedRole, children }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <p className="text-slate-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#e5e5e5]">
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14213d] border-t-[#fca311]" />
+          <p className="text-xs font-bold text-[#14213d]">Authenticating session...</p>
+        </div>
       </div>
     );
   }
@@ -16,7 +26,14 @@ function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
-}
+  const userRole = (user.role || "").toLowerCase();
 
-export default ProtectedRoute;
+  if (allowedRole && userRole !== allowedRole.toLowerCase()) {
+    if (userRole === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children ? <>{children}</> : <Outlet />;
+}

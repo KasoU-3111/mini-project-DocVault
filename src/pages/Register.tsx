@@ -1,3 +1,4 @@
+// src/pages/Register.tsx
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUp, confirmSignUp } from "aws-amplify/auth";
@@ -10,12 +11,12 @@ import {
   EyeOff,
   ShieldCheck,
 } from "lucide-react";
+import { parseAuthError } from "../utils/authUtils";
 
-function Register() {
+export default function Register() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
-
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,329 +28,219 @@ function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // -----------------------------
-  // Register user
-  // -----------------------------
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
-
     setError("");
     setSuccess("");
     setLoading(true);
 
     try {
       const result = await signUp({
-        username: email,
-        password: password,
+        username: email.trim(),
+        password,
         options: {
           userAttributes: {
-            email: email,
-            name: fullName,
+            email: email.trim(),
+            name: fullName.trim(),
           },
         },
       });
 
-      console.log("Signup result:", result);
-
       if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
         setShowVerification(true);
-        setSuccess(
-          "Account created successfully! A verification code has been sent to your email."
-        );
+        setSuccess("Account created successfully! A verification code has been sent to your email.");
       } else {
         setSuccess("Account created successfully!");
         navigate("/login");
       }
-    } catch (err: any) {
-      console.error("Registration error:", err);
-
-      if (err.name === "UsernameExistsException") {
-        setError("An account with this email already exists.");
-      } else if (err.name === "InvalidPasswordException") {
-        setError(
-          "Password does not meet AWS Cognito password requirements."
-        );
-      } else if (err.name === "InvalidParameterException") {
-        setError("Please check your name, email, and password.");
-      } else {
-        setError(err.message || "Registration failed. Please try again.");
-      }
+    } catch (err: unknown) {
+      setError(parseAuthError(err, "Registration failed. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
-  // -----------------------------
-  // Verify user
-  // -----------------------------
   const handleVerification = async (e: FormEvent) => {
     e.preventDefault();
-
     setError("");
     setSuccess("");
     setLoading(true);
 
     try {
-      const result = await confirmSignUp({
-        username: email,
-        confirmationCode: confirmationCode,
+      await confirmSignUp({
+        username: email.trim(),
+        confirmationCode: confirmationCode.trim(),
       });
 
-      console.log("Verification result:", result);
-
-      setSuccess(
-        "Email verified successfully! You can now login to DocVault."
-      );
-
+      setSuccess("Email verified successfully! Redirecting to login...");
       setTimeout(() => {
         navigate("/login");
       }, 1500);
-    } catch (err: any) {
-      console.error("Verification error:", err);
-
-      if (err.name === "CodeMismatchException") {
-        setError("Invalid verification code. Please try again.");
-      } else if (err.name === "ExpiredCodeException") {
-        setError(
-          "Verification code has expired. Please request a new code."
-        );
-      } else {
-        setError(
-          err.message || "Verification failed. Please try again."
-        );
-      }
+    } catch (err: unknown) {
+      setError(parseAuthError(err, "Verification failed. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-[#e5e5e5] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-
-        {/* Logo */}
+        {/* Header Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg mb-4">
-            <FileText className="text-white" size={32} />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#14213d] text-[#fca311] rounded-2xl shadow-lg border border-[#14213d]/20 mb-4">
+            <FileText size={32} />
           </div>
-
-          <h1 className="text-3xl font-bold text-slate-800">
-            DocVault
-          </h1>
-
-          <p className="text-slate-500 mt-2">
-            {showVerification
-              ? "Verify your student account"
-              : "Create your student account"}
+          <h1 className="text-3xl font-extrabold text-[#14213d] tracking-tight">DocVault</h1>
+          <p className="text-[#14213d]/70 text-sm mt-1 font-medium">
+            {showVerification ? "Verify your student account" : "Create your student account"}
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-
+        <div className="bg-white rounded-2xl shadow-xl border border-[#14213d]/10 p-8">
           {!showVerification ? (
             <>
-              {/* Registration Form */}
-
-              <h2 className="text-2xl font-semibold text-slate-800">
-                Create Account
-              </h2>
-
-              <p className="text-slate-500 mt-1 mb-6">
+              <h2 className="text-2xl font-extrabold text-[#14213d]">Create Account</h2>
+              <p className="text-[#14213d]/60 text-sm mt-1 mb-6">
                 Register to manage your college documents
               </p>
 
-              {/* Error */}
               {error && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                <div role="alert" className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
                   {error}
                 </div>
               )}
 
-              {/* Success */}
               {success && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-sm">
+                <div role="status" className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
                   {success}
                 </div>
               )}
 
               <form onSubmit={handleRegister} className="space-y-4">
-
-                {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     Full Name
                   </label>
-
                   <div className="relative">
-                    <User
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
+                    <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                     <input
                       type="text"
                       placeholder="Enter your full name"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       required
-                      className="w-full pl-11 pr-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full pl-11 pr-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                     />
                   </div>
                 </div>
 
-                {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     College Email
                   </label>
-
                   <div className="relative">
-                    <Mail
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
+                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                     <input
                       type="email"
                       placeholder="Enter your college email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="w-full pl-11 pr-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full pl-11 pr-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                     />
                   </div>
                 </div>
 
-                {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     Password
                   </label>
-
                   <div className="relative">
-                    <Lock
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
+                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40" />
                     <input
                       type={showPassword ? "text" : "password"}
                       placeholder="Create a password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="w-full pl-11 pr-12 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full pl-11 pr-12 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] transition text-[#14213d]"
                     />
-
                     <button
                       type="button"
-                      onClick={() =>
-                        setShowPassword(!showPassword)
-                      }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#14213d]/40 hover:text-[#14213d] cursor-pointer"
                     >
-                      {showPassword ? (
-                        <EyeOff size={20} />
-                      ) : (
-                        <Eye size={20} />
-                      )}
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Register Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition mt-2"
+                  className="w-full bg-[#fca311] hover:bg-[#e08e03] disabled:opacity-50 text-[#14213d] font-bold py-3 rounded-xl transition shadow-md mt-2 cursor-pointer"
                 >
                   {loading ? "Creating Account..." : "Create Account"}
                 </button>
-
               </form>
 
-              {/* Login */}
-              <div className="text-center mt-6 text-sm text-slate-500">
+              <div className="text-center mt-6 text-xs text-[#14213d]/70">
                 Already have an account?{" "}
-                <Link
-                  to="/login"
-                  className="text-blue-600 font-semibold hover:text-blue-700"
-                >
+                <Link to="/login" className="text-[#14213d] font-bold hover:text-[#fca311] transition">
                   Login
                 </Link>
               </div>
             </>
           ) : (
             <>
-              {/* Verification Form */}
-
               <div className="text-center mb-6">
-                <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-full mb-4">
-                  <ShieldCheck
-                    className="text-blue-600"
-                    size={30}
-                  />
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-[#14213d] text-[#fca311] rounded-2xl mb-4 border border-[#14213d]/20 shadow-md">
+                  <ShieldCheck size={30} />
                 </div>
-
-                <h2 className="text-2xl font-semibold text-slate-800">
-                  Verify Your Email
-                </h2>
-
-                <p className="text-slate-500 mt-2">
-                  We sent a verification code to:
-                </p>
-
-                <p className="font-semibold text-slate-700 mt-1">
-                  {email}
-                </p>
+                <h2 className="text-2xl font-extrabold text-[#14213d]">Verify Your Email</h2>
+                <p className="text-[#14213d]/60 text-sm mt-1">We sent a verification code to:</p>
+                <p className="font-bold text-[#14213d] mt-1">{email}</p>
               </div>
 
-              {/* Error */}
               {error && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                <div role="alert" className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
                   {error}
                 </div>
               )}
 
-              {/* Success */}
               {success && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-sm">
+                <div role="status" className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
                   {success}
                 </div>
               )}
 
-              <form
-                onSubmit={handleVerification}
-                className="space-y-4"
-              >
+              <form onSubmit={handleVerification} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#14213d]/80 mb-2">
                     Verification Code
                   </label>
-
                   <input
                     type="text"
                     placeholder="Enter verification code"
                     value={confirmationCode}
-                    onChange={(e) =>
-                      setConfirmationCode(e.target.value)
-                    }
+                    onChange={(e) => setConfirmationCode(e.target.value)}
                     required
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest"
+                    className="w-full px-4 py-3 text-sm bg-[#e5e5e5]/30 border border-[#14213d]/20 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-[#fca311] focus:border-[#14213d] text-center tracking-widest text-[#14213d]"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition"
+                  className="w-full bg-[#14213d] hover:bg-[#0d1629] disabled:opacity-50 text-white font-bold py-3 rounded-xl transition shadow-md cursor-pointer"
                 >
                   {loading ? "Verifying..." : "Verify Account"}
                 </button>
               </form>
 
-              <div className="text-center mt-6 text-sm text-slate-500">
+              <div className="text-center mt-6 text-xs text-[#14213d]/70">
                 Wrong email?{" "}
                 <button
                   type="button"
@@ -358,7 +249,7 @@ function Register() {
                     setError("");
                     setSuccess("");
                   }}
-                  className="text-blue-600 font-semibold hover:text-blue-700"
+                  className="text-[#14213d] font-bold hover:text-[#fca311] transition cursor-pointer"
                 >
                   Go Back
                 </button>
@@ -370,5 +261,3 @@ function Register() {
     </div>
   );
 }
-
-export default Register;
